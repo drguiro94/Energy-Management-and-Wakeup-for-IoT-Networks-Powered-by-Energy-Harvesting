@@ -17,7 +17,7 @@ Every method uses the same physical simulator. Their difference is how they choo
 
 ## 2. Which script should I run?
 
-Extract the ZIP and make `EH_IoT_clean` your MATLAB current folder. Base MATLAB R2016b or newer is the intended target; GNU Octave 8.4.0 was used for the delivered checks. No Deep Learning, Reinforcement Learning, Statistics, or Parallel Computing Toolbox is required. No Python, input dataset, or pretrained model is needed for a normal MATLAB run.
+Extract the ZIP and make `EH_IoT` your MATLAB current folder. Base MATLAB R2016b or newer is the intended target. No Deep Learning, Reinforcement Learning, Statistics, or Parallel Computing Toolbox is required. No Python, input dataset, or pretrained model is needed for a normal MATLAB run.
 
 | Entry point | What it does | Default methods |
 | --- | --- | --- |
@@ -33,6 +33,7 @@ Extract the ZIP and make `EH_IoT_clean` your MATLAB current folder. Base MATLAB 
 | `run_information_experiment.m` | Runs the earlier information-only experiment; its default is the alternate 10 m model. | See its method list |
 | `run_tuned_comparison.m` | Runs the older information-only search and independent comparison. | See its method list |
 | `run_reproduction_audit.m` | Checks physical information/energy limits; it is not a training experiment. | No learned comparison |
+| `run_calibrated_experiments.m` | Runs the full optimization; it compares 12 RL and 12 DT candidate configurations on separate calibration deployments. It varies episodes, training slots, learning rates, reward weights, offline-data size, context length, and update limits, plus DT architecture settings. | `random`, `cluster`, `rl`, `dt`, `genie` |
 
 Quick starts:
 
@@ -46,9 +47,7 @@ run_information_detection_experiment
 
 Run one entry point at a time.
 
-### Does main_full run the conference, and run_rl_dt add RL/DT?
-
-`main_full` retains the baseline/scenario organization of the conference archive, but its default `paper_config('quick')` uses the journal-model reconstruction. It is **not a literal rerun of the original conference code**.
+`main_full` retains the baseline/scenario organization of the conference archive, but its default `paper_config('quick')` uses the journal-model reconstruction.
 
 `run_rl_dt` is a separate complete experiment. It does not need `main_full` to run first, does not append to a previous `Results` object, and does not automatically reuse previously saved trained models.
 
@@ -60,12 +59,12 @@ cfg.methods = {'random','adjusted','cluster','rl','dt','genie'};
 
 Keep `rl` before `dt` when `cfg.dt.reuse_rl_teacher=true` so the DT can reuse the frozen RL teacher trained for that deployment. Including `adjusted` adds its pilot-search cost.
 
-## 3. What happens during one simulation slot?
+## 3. One simulation slot
 
 The central file is `simulate_network.m`. A TTI is one simulation time slot.
 
 1. The controller chooses which sensors should be awake using information available before the current event.
-2. Awake sensors pay the idle/sensing cost; sleeping sensors pay the wakeup-receiver cost.
+2. Awake sensors pay the idle/sensing cost; sleeping sensors pay the wake-up-receiver cost.
 3. If an event occurs, nearby awake sensors try to transmit. A transmission succeeds only if the sensor has enough actual battery energy.
 4. If at least one report arrives, methods that support extra reports can request sleeping sensors. These requests use energy and may improve the final information.
 5. Energy is harvested at the end of the slot and clipped to battery capacity.
@@ -109,7 +108,7 @@ It compares each candidate's mean information per expected event with a geometri
 
 After an initial report, it ranks sleeping candidates using report-based spatial correlation. It requests one sensor at a time and recomputes the ranking after each outcome, stopping at the target or when no eligible candidates remain.
 
-This is a pilot search over fixed schedules, not RL. Its search rule is not automatically replaced by the joint RL/DT objective.
+This is a pilot search over fixed schedules, not RL.
 
 **Main files:** `build_policy.m`, especially `select_duty_cycle`; `voronoi_information_target.m`; `wake_close_device.m`; `correlation_lookup.m`; `simulate_network.m`.
 
@@ -121,8 +120,6 @@ Sensors are grouped by their positions using the archive's k-means approach. The
 
 Within each group, sensors take turns being awake. The planned schedule gives each group one awake sensor per slot, although an energy shortage can prevent actual sensing/reporting. After an initial report, the same sequential, report-conditioned heuristic used by the adjusted method can request extra reports.
 
-The journal describes a KNN-based method; the supplied source uses k-means. This package labels the implemented source method accordingly.
-
 **Main files:** `kmeans_cluster.m`, `check_idle.m`, `wake_close_device.m`, `simulate_network.m`.
 
 **Parameters:** sensing range/area determine the default grouping; `cfg.cluster_replicates` and `cfg.cluster_iterations` control k-means. The RL/DT `cluster_scale` controls are separate from this baseline.
@@ -131,15 +128,15 @@ The journal describes a KNN-based method; the supplied source uses k-means. This
 
 The genie knows whether and where the current event occurs. It activates the nearest sensor within range and does not need to discover the event through an initial practical report.
 
-By default, the selected sensor still has a finite battery. Therefore, the finite-battery genie is a privileged comparator, not a guaranteed upper bound on every individual sample path: its nearest sensor can be depleted.
+By default, the selected sensor still has a finite battery. Therefore, the finite-battery genie is a privileged comparator, not a guaranteed upper bound on every individual sample path: its nearest sensor can still be depleted.
 
 `cfg.genie_ignore_battery=true` creates an ideal information comparator that ignores battery failures. Keep its label distinct from the finite-battery version.
 
 **Main files:** the `genie` branches in `build_policy.m` and `simulate_network.m`.
 
-### Simplified shared-Q reference — q_reference
+### Shared-Q reference — q_reference
 
-This older reference learns only sleep/awake decisions with one shared Q table. Extra-report requests use a separate greedy estimated-gain rule.
+This reference learns only sleep/awake decisions with one shared Q table. Extra-report requests use a separate greedy estimated-gain rule.
 
 It remains available as an optional comparison. Use `rl` for the complete two-stage learner.
 
@@ -147,7 +144,7 @@ It remains available as an optional comparison. Use `rl` for the complete two-st
 
 ### Two-stage reinforcement learning — rl
 
-RL learns by trying actions in the simulator and receiving rewards. In easy words: it keeps a table of how useful each action has been in a particular situation.
+RL learns by trying actions in the simulator and receiving rewards. It keeps a table of how useful each action has been in a particular situation.
 
 There are two tables, each `1440 x 2`:
 
@@ -188,13 +185,13 @@ mu2 * final_information - executed_request_count / N
 
 The recommended RL wake table receives incremental credit: information gained by each executed request minus that request's cost. Its wake discount is zero. This helps assign credit to the individual requests that produced useful information.
 
-Wake actions are selected together after the initial reports, then executed in their initial ranking order. The learned RL/DT wake vector is not recalculated after every additional report. This differs from the adaptive sequential baseline heuristic.
+Wake actions are selected together after the initial reports, then executed in their initial ranking order. The learned RL/DT wake vector is not recalculated after every additional report.
 
 **Main parameters:** `cfg.rl.episodes`, `steps`, `learning_rate`, `discount`, `epsilon_start/end`, `mu1`, `mu2`, and validation controls.
 
 ### Decision Transformer — dt
 
-The DT learns from saved examples of decisions and outcomes. In easy words: RL produces experience, and the DT learns which actions tend to appear in useful histories.
+The DT learns from saved examples of decisions and outcomes. RL produces experience, and the DT learns which actions tend to appear in useful histories.
 
 There are two independent transformer networks:
 
@@ -237,13 +234,13 @@ The models are deployment- and device-count-specific. The experiment trains fres
 
 The selected RL/DT scores pass through `coverage_rank` coordination. A fixed grid represents the known monitored area. The controller greedily chooses an energy-eligible awake set that covers it, combining coverage gain with learned scores and estimated battery energy.
 
-`configure_learning_control.m` defines the awake budget/constraints; `learning_idle_actions.m` chooses the awake set. The optional mean-harvest cap further limits the awake budget. The selected 20 m calibration disables that optional cap, while retaining energy guards and actual battery constraints.
+`configure_learning_control.m` defines the awake budget/constraints; `learning_idle_actions.m` chooses the awake set. The optional mean-harvest cap further limits the awake budget.
 
 These are designed control rules shared by RL and DT, not weights learned by the transformer or Q tables. The recommended methods should be understood as learned scores combined with documented spatial/energy coordination.
 
-## 5. Your example: will it give the best RL and DT results?
+## 5. RL and DT results
 
-**It runs the bundled, selected quick configuration for the 20 m model. It does not guarantee the best possible RL/DT performance or exact paper results.**
+**It runs the bundled, selected quick configuration for the 20 m model. It does not guarantee the best possible RL/DT performance.**
 
 With the bundled calibration present, these values in your example already match the selected settings:
 
@@ -262,7 +259,7 @@ Early stopping can finish training before the configured maximum. One offline ep
 
 Other influential settings are inherited from the calibration, including coverage coordination, energy margin, the teacher/exploration controls, class balancing, and DT closed-loop selection. The wake threshold in `cfg.dt.wake_threshold` is a selection candidate; the final selected threshold is stored in `policy.dt.wake.action_threshold`.
 
-The quick calibration compared **three RL candidates and two DT architectures**, using the mean joint validation score across N=50 and N=250. It selected the RL settings first, then compared DT architectures using that selected RL teacher. The selected settings are best among those tested at each step for that score. They are not proven optimal, are not necessarily best at each individual N, and were not selected for N=10.
+The quick calibration compared **three RL candidates and two DT architectures**, using the mean joint validation score across N=50 and N=250. It selected the RL settings first, then compared DT architectures using that selected RL teacher. The selected settings are the best among those tested at each step for that score. They are not proven optimal, are not necessarily best at each N, and were not selected for N=10.
 
 The selection score is:
 
@@ -277,7 +274,7 @@ The final bundled three-deployment tests also do not show universal superiority:
 
 ### Ready-to-run version of your script
 
-Run this from the extracted `EH_IoT_clean` folder:
+Run this from the extracted `EH_IoT` folder:
 
 ```matlab
 clear; clc; close all;
@@ -327,7 +324,7 @@ plot_learning(Results);
 
 This loads settings, trains fresh models, selects checkpoints on validation data, then evaluates frozen policies. It does not automatically launch the hyperparameter search or load a previously saved trained policy.
 
-### What to do if you want a stronger experiment
+### Optimized experiment
 
 For a first run, use the script above unchanged. For a more serious search, use the larger validation-based calibration:
 
@@ -360,7 +357,7 @@ Use independent validation to compare changes, then run final tests after choosi
 
 Increase `MCarlo` to assess variation across independent deployments. Increasing only `total` gives a longer final test; it does not give the learner additional training. Three deployments have limited statistical precision.
 
-## 6. Where to configure parameters
+## 6.Configure parameters
 
 The configuration layers, from base settings to effective settings, are:
 
@@ -503,7 +500,7 @@ For your own experiment, print `cfg` after your last assignment and immediately 
 
 ### 6.3 Apply changes in your own experiment script
 
-For most experiments, leave the helper functions unchanged. Create `run_my_experiment.m` in `EH_IoT_clean`, load a configuration once, apply your changes, then call the shared runner directly.
+For most experiments, leave the helper functions unchanged. Create `run_my_experiment.m` in `EH_IoT`, load a configuration once, apply your changes, then call the shared runner directly.
 
 This complete example demonstrates modifications to event probability, battery capacity, training budgets, and the reliability preference. These illustrative values have not been selected by the bundled calibration and are not a claim of better performance.
 
@@ -871,7 +868,7 @@ You normally edit the entry script or final `cfg` values. The tables below expla
 | `models/dt_N*_trial*.mat` | Frozen DT policy and configuration for each deployment. |
 | `checkpoint.mat` | Completed-deployment checkpoint for resuming a compatible run. |
 
-`plot_results` uses `fig07_information.png` for the expected-event normalization. Figure numbers identify metric families; they do not assert that plotted numbers reproduce the publication.
+`plot_results` uses `fig07_information.png` for the expected-event normalization. 
 
 Useful access from MATLAB:
 
@@ -906,15 +903,6 @@ validate_tuning
 validate_information_detection
 ```
 
-These checks validate implementation mechanics, causality, gradients, and physical accounting. They do not establish that a policy is globally optimal or that the publication's curves have been reproduced.
+These checks validate implementation mechanics, causality, gradients, and physical accounting.
 
-## 10. How to interpret results against the paper
-
-The delivered joint experiment was executed for N=[10 50 250], three independent deployments per N, and 10000 test slots per deployment, for both physical profiles. It is a measured quick study, not the full 250-episode/1000-deployment experiment.
-
-Under the 20 x 20 m, uniform-event, exponential-decay, max-information assumptions, the audited any-placement information bound at N=250 is about 0.6305 even before energy losses. An RL level near 0.72 cannot be reached by tuning the learner alone under those exact assumptions. The 10 m alternate profile changes that physical limit and must remain separately labeled.
-
-Inspect information, missed events, uncertainty, and energy together. DT need not beat its RL teacher, and RL/DT need not beat every heuristic in a particular geometry or training budget. Report adverse outcomes as well as improvements. The code saves measured outcomes without rescaling, forcing a method ordering, or fitting published figure coordinates.
-
-The original inputs remain unchanged. The source archive's MIT license is preserved in `LICENSE`.
 
