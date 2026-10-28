@@ -23,7 +23,8 @@ Check the file README_EH_IoT_Code_Guide.md for more details.
 
 ## Acknowledgements
 
-This work has been partially supported by the Research Council of Finland (Grant 369116 (6G Flagship Programme), Grant 362782), the Finnish Foundation for Technology Promotion, the European Commission through the Horizon Europe/JU SNS projects Hexa-X-II (Grant Agreement no. 101095759) and AMBIENT-6G (Grant 101192113), and in Chile, by ANID FONDECYT Regular No.1241977.
+This work was supported in part by the Research Council of Finland under Grant 369116 (6G Flagship Program) and Grant 362782 (ECO-LITE); in part by the Finnish Foundation for Technology Promotion; in part by the European Commission through the Horizon Europe/Smart Networks and Services - Joint Undertaking (SNS-JU) Projects Hexa-X-II under Grant 101095759; in part by AMBIENT-6G under Grant 101192113; in part by the Velux Foundation, Denmark, through the Villum Investigator Grant WATER, under Grant 37793; in part by Agencia Nacional de Investigacion y Desarrollo (ANID) FONDECYT in Chile under Grant 1241977; in part by ANID under Grant CIA250016 (CPS-RTC); in part by NSF under Grant ECCS-2302469; and in part by Japan Science and Technology Agency (JST), Adopting Sustainable Partnerships for Innovative
+Research Ecosystem (ASPIRE) under Grant JPMJAP2326. (Corresponding author: David E. Ruiz-Guirola.)
 
 ## License and Referencing
 
